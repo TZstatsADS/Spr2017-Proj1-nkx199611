@@ -1,0 +1,188 @@
+---
+title: "ADS Project1: Explore the relationship between focus on immigration topic during inauguration speeches and immigration statistics"
+author: "Kexin Nie"
+date: "Feb 3rd, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE,echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Introduction
+As we all have known, just few days after the inauguration ceremony of Donald Trump, the new executive orders for immigrants and refugees came out. Those policies has had a significant effect on everyone in this country. Many have been distressed and refused to accept the order. Trump's negative attitude towards immigrants and refugees could be seen from some of his speeches last year, and he did come up with new orders against them. According to Trump's new order, we might think whether the inauguration speeches reflect the trend of immigration policies, which might affect the immigration statistics. In this project, data mining techniques will be used to explore the relationship between inauguration speeches and immigration statistics.
+
+#Method
+
+To estimate the importance of immigration topic in a speech, we decide to use word frequency. If in a specific speech, the president mentions many immigration related words, it might imply that the president focus more on immigration topic than other presidents. We first need to find which words are related to immigration topic, then we count word frequency of those selected words in each speech.
+
+step 0-Install and load libraries
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+packages.used=c("tm", 
+                "dplyr", "tidytext","ggplot2","sentimentr","plotrix")
+
+# check packages that need to be installed.
+packages.needed=setdiff(packages.used, 
+                        intersect(installed.packages()[,1], 
+                                  packages.used))
+# install additional packages
+if(length(packages.needed)>0){
+  install.packages(packages.needed, dependencies = TRUE,
+                   repos='http://cran.us.r-project.org')
+}
+
+library(tm)
+library(dplyr)
+library(tidytext)
+library(ggplot2)
+library(sentimentr)
+library(plotrix)
+
+```
+
+step1-Import speeches
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+
+folder.path=file.path("C:", "Users","Sherlock","Documents","ADS","Project 1","data","InauguralSpeeches") 
+speeches=list.files(path = folder.path, pattern = "*.txt")
+prex.out=substr(speeches, 6, nchar(speeches)-4)
+
+ff.all<-Corpus(DirSource(folder.path))
+
+#Clean Up
+ff.all<-tm_map(ff.all, stripWhitespace)
+ff.all<-tm_map(ff.all, content_transformer(tolower))
+ff.all<-tm_map(ff.all, removeWords, stopwords("english"))
+ff.all<-tm_map(ff.all, removeWords, character(0))
+ff.all<-tm_map(ff.all, removePunctuation)
+
+```
+step2-Find immigration related words using term correlations
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+
+dtm <- DocumentTermMatrix(ff.all,
+                          control = list(weighting = function(x)
+                                             weightTfIdf(x, 
+                                                         normalize =FALSE),
+                                         stopwords = TRUE))
+
+findAssocs(dtm, c("immigration" ), corlimit=0.65)
+findAssocs(dtm, c("immigrants" ), corlimit=0.65)
+
+```
+As we can see from the results, we choose the top 12 words with highest correlation to "immigration" and "immigrants"(including themselves).We drop the first word "monroe" since it only appears in certain speech, it might be certain policy conducted by certain president, so we can ignore it.
+
+step3- Compare the frequency of immigration related words in speeches
+
+To calculate the immigration-related words frequency, we count word frequency for the selected words above, then we obtain a sum for each speech weighted by the correlation of each word. This method makes sense since words less similar to "immigrants" or "immigration" should be given less weights.
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+m<-as.matrix(dtm)
+im.score<-m[,"immigration"]+m[,"protective"]*0.69+m[,"courts"]*0.67+m[,"expenditures"]*0.67+m[,"taxation"]*0.67+m[,"methods"]*0.66+m[,"immigrants"]+m[,"invented"]*0.81+m[,"vowed"]*0.81+m[,"bridge"]*0.77+m[,"engineers"]*0.69+m[,"harm"]*0.69
+im.order<-im.score[order(im.score,decreasing=TRUE)]
+im.score.df<-data.frame(im.order[1:20])
+im.score.df$name<-names(im.order[1:20])
+im.score.df$name<-substr(im.score.df$name,6,nchar(im.score.df$name)-4)
+colnames(im.score.df)<-c("freq","name")
+p <- ggplot(im.score.df, aes(name, freq ))    
+p <- p + geom_bar(stat="identity")   
+p <- p + theme(axis.text.x=element_text(angle=45, hjust=1))   
+p   
+
+```
+
+
+By looking at the first 20 speeches containing the largest amount of immigration contents, we find that Tump seems to mention many immigration-related contents in his speech on Jan 20th compared to other presidents. Also did William Howard Taft in his first speech.
+
+step4-Analyze attitude of the speech through sentiment analysis
+
+After understanding how much each president talked about immigration issues in their speeches, we want to look into their attitudes towards immigration topic. First we only choose the sentences in each speech that contain the "key word" for immigration topic. Then we do a sentiment analysis for each speech only on immigration-related parts. A higher sentiment score represents a more positive attitude towards immigration. Please notice that we drop some speeches during sentiment analysis. Because when we include the sentences containing "key word", some speeches might not have any sentence matching. To make the calculation tidy, we drop these rows with NA values.
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#get immigration related sentences from the 40 speeches that contain the highest word frequency
+
+ff.all1<-Corpus(DirSource(folder.path))
+all.df<-data.frame(text=sapply(ff.all1, as.character), stringsAsFactors = FALSE)
+all.df.t<-data.frame(t(all.df[1,]))
+all.40<-all.df.t[which(!is.na(match(names(im.score),names(im.order[1:40])))),]
+all.40<-data.frame(all.40)
+
+
+#sentiment mining
+
+all.40$im<-NA
+for(i in 1:40){
+  sen<-strsplit(as.String(all.40[i,1]),".",fixed=TRUE)
+  sen<- sen[grep("immigration|protective|courts|expenditures|immigrants|invented|vowed|bridge",sen)]
+  sen<-as.String(unlist(sen))
+  if(is.null(sen)==TRUE){
+    all.40$im[i]<-0
+  }else{
+    all.40$im[i]<-sentiment(sen)$sentiment
+  }
+  
+}
+#Save data into one dataframe
+all.40$name<-substr(rownames(all.40),11,nchar(rownames(all.40))-4)
+all.40$freq<-im.score[which(!is.na(match(names(im.score),names(im.order[1:40]))))]
+```
+step5-Compare the previous results to immigration statistics
+
+For immigration data, we use the number of foreign nationals who are granted lawful permanent residence (i.e., immigrants who receive a "green card"), admitted as temporary nonimmigrants, granted asylum or refugee status, or are naturalized from 1820 to 2015 table from https://www.dhs.gov/immigration-statistics/yearbook/2015/table1
+This table reflects the amount of new immigrants every year. The trend of the data might be affected by some factors such as economy or "global trend" through time, so using the changing rate might be more reasonable than the data itself. Change rates do a better job in representing the change of immigration statistic after the speech. We define
+
+#Change rate[i]=(nt[i]-n0[i])/n0[i]
+
+i- ith speech (belongs to president X,term Y)
+
+n0[i]-Year X started to work in term Y
+
+nt[i]-Year X ended to work in term Y
+
+Then we plot changerates, word frequency and sentiment scores on same plot. Since there exists many other complicate factors who affect changerates, running a regression model might not be efficient for right now, so we will look at the result plot and find some patterns.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#Clean dataframe and get rid of some zero values
+comp.40<-all.40[,-1]
+comp.40<-comp.40[comp.40$im!=0 & comp.40$freq!=0,]
+#Import the working period of each president in dataframe, since we analyze through individual speech, some presidents might have two different working period.
+comp.40$startyear<-c(1833,2013,1889,1923,1789,1885,1893,1881,1809,1821,1825,1921,1909,1997,1897,1899,1849)
+comp.40$endyear<-c(1837,2017,1893,1929,1793,1889,1897,1881,1813,1825,1829,1923,1913,2001,1899,1901,1850)
+#Import the immigration data and clean data
+immi<-read.csv("imm.csv",as.is = TRUE)
+immi$Number<-as.numeric(sub(",","",sub(",","",immi$Number)))
+immi$Year<-as.numeric(immi$Year)
+comp.40<-data.frame(comp.40)
+comp.40<-comp.40[comp.40$startyear>=1820,]
+comp.40<-comp.40[comp.40$endyear<=2015,]
+#Calculate the change rate of immigration population
+comp.40$changerate<-NA
+for(i in 1:nrow(comp.40)){
+  a<-immi[which(immi$Year==comp.40$endyear[i]),2]
+  b<-immi[which(immi$Year==comp.40$startyear[i]),2]
+  comp.40$changerate[i]<-(a-b)/b
+
+}
+
+comp.40$sentimentscore<-comp.40$im
+comp.40$changerate.re<-rescale(comp.40$changerate,range(comp.40$freq))
+#Plot all the data
+p<-ggplot(data=comp.40,aes(x=name, y=freq,fill=sentimentscore)) + 
+  geom_bar(stat="identity") +
+  geom_point(aes(x=name, y=changerate.re))+
+   theme(axis.text.x=element_text(angle=45, hjust=1))+
+   geom_abline(aes(intercept=mean(freq),slope=0,colour="red"))+
+   ggtitle("Barplot of word frequency with immigration population change rate")
+  
+p
+
+```
+
+
+In the result plot, word frequency is showed in barplot with colors representing sentiment scores. The bars with a lighter color mean more positive attitude towards immigration topic. Also the points represent the change rate of immigration statistics after the speech. Since we rescale the changerates just for plotting reasons, the points below the red line show negative changerate, which means a decrease in immigration statistics.
+
+From the graph, we notice some patterns:1) Points have similar trend with bars, for example, on the right hand side, word frequnency is pretty hight with high sentiment scores, which means in these speech, those presidents use more words talking about immigration issues with more positive attitude, so the number of new immigrants each year increases. 2) Specificly looking at president William Howard Taft, he seems to use a big part of his speech talking about immigration with a really positive attitude, where we observe a big increase of new immigrants per year after his term. 3)But when we look at Calvin Coolidge term 1,he seems to give a positive attitude in the immigration part in his speech, but after his term, there is a decrease of immigrants per year.
+
+#Summary
+After finding word frequency and sentiment scores for immigration topic, we compare them to the change rate of yearly new immigrants numbers. After exploring the result plot, we notice for sometime, immigration statistics might have a positive relationship with sentiment scores and immigration word frequency. It might because a positive attitude and a lot focus on immigration during inauguration speech might reflect the president's attitude towards immigration problem, which might affect his policies. But this claim is not always true since we observe some points in the plot against it. It might due to 1) There are many other factors which affect the immigration statistics other than immigration policies, such as economy and wars. 2) The random errors which happen in data mining process. Sentences that contain "immigration-related words" might not be immigration-related.
+
+#Further Discussion
+To figure out more about the relationship between inauguration speech and immigration, readers are suggested to read through some of the speeches to get a better sense of the president's attitude. If we want to predict the future immigration statistics change ratio, we could build a regression model. But to make the model valid, we need to find some other factors that might also explain immigration statistics, such as GDP.
