@@ -19,7 +19,7 @@ Term: Spring 2017
  -Compare the frequency of immigration related words in speeches To calculate the immigration-related words frequency
  -Analysis attitude of the speech through sentiment analysis
  -Compare the previous results to immigration statistics For immigration data
-+ Tips for reproducing
++ Tips for reproducing:
  Make sure to put imm.csv in your working directory
  .You have to change the location of speech files in part 1 manually
  .In step0, if you fail to install certain packages, use romove.pakage(), then try to intall the package again
