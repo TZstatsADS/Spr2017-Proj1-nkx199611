@@ -17,7 +17,7 @@ Term: Spring 2017
  Import Speeches
  -Find immigration related words using term correlations
  -Compare the frequency of immigration related words in speeches To calculate the immigration-related words frequency
- -Analysis attitude of the speech through sentiment analysis
+ -Analyze attitudes of the speech through sentiment analysis
  -Compare the previous results to immigration statistics For immigration data
 + Tips for reproducing:
  Make sure to put imm.csv in your working directory
